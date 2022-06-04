@@ -19,5 +19,5 @@ export class BookEntity extends BaseEntity {
     nullable: true,
     eager: false,
   })
-  user: UserEntity;
+  user: UserEntity | null;
 }
