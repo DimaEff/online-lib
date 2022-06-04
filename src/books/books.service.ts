@@ -12,7 +12,7 @@ export class BooksService {
   ) {}
 
   async create(dto: CreateBookDto): Promise<BookEntity> {
-    return this.bookRepository.save({ user: null, ...dto });
+    return this.bookRepository.save(dto);
   }
 
   async getAll(): Promise<BookEntity[]> {

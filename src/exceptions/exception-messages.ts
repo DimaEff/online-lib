@@ -5,5 +5,8 @@ export const EXCEPTIONS_MESSAGES = {
   ALREADY_SUBSCRIBE: 'The user already subscribe',
   ALREADY_UNSUBSCRIBE: 'The user already unsubscribe',
   BOOK_ALREADY_ADDED: 'The book already add for this user',
+  BOOK_NOT_ADDED: 'The book has not been added to this user',
   SHOULD_BE_UNIQUE: (field: string) => `The ${field} field should be unique`,
+  ALREADY_EXISTS: (entityName: string) => `The ${entityName} already exists`,
+  NOT_EXISTS: (entityName: string) => `The ${entityName} does not exist`,
 };

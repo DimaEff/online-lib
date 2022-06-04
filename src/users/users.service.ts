@@ -5,9 +5,10 @@ import { Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { BooksService } from '../books/books.service';
 import { MAX_BOOKS_COUNT } from '../consts';
-import { AddBookDto } from './dto/add-book.dto';
+import { AddRemoveBookDto } from './dto/add-remove-book.dto';
 import { BookEntity } from '../books/entities/book.entity';
 import { EXCEPTIONS_MESSAGES } from '../exceptions/exception-messages';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -18,29 +19,66 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto): Promise<UserEntity> {
-    const user = await this.getByUsername(dto.username);
-    console.log(user);
-    if (user)
-      throw new HttpException(
-        EXCEPTIONS_MESSAGES.SHOULD_BE_UNIQUE('username'),
-        HttpStatus.BAD_REQUEST,
-      );
+    await this.checkIsUsernameUniqueWithException(dto.username);
     // subscription === false assignment in UserEntity as default value
     return this.userRepository.save(dto);
+  }
+
+  async update(uid: number, dto: UpdateUserDto): Promise<UserEntity> {
+    const user = await this.getById(uid);
+    if (dto.username) {
+      await this.checkIsUsernameUniqueWithException(dto.username, user);
+    }
+
+    return this.userRepository.save({
+      id: uid,
+      ...user,
+      ...dto,
+    });
+  }
+
+  async delete(uid: number): Promise<void> {
+    const user = await this.getById(uid);
+    await user.remove();
   }
 
   async getAll(): Promise<UserEntity[]> {
     return this.userRepository.find();
   }
 
-  async addBook({ uid, bookId }: AddBookDto): Promise<UserEntity> {
+  async getById(id: number): Promise<UserEntity | undefined> {
+    const user = await this.userRepository.findOneById(id);
+    if (!user)
+      throw new HttpException(
+        EXCEPTIONS_MESSAGES.NOT_EXISTS('user'),
+        HttpStatus.BAD_REQUEST,
+      );
+
+    return user;
+  }
+
+  async addBook({ uid, bookId }: AddRemoveBookDto): Promise<UserEntity> {
     const user = await this.getById(uid);
     const book = await this.booksService.getById(bookId);
-    this.checkForAddingBook(user, book);
+    this.checkForAddingBookWithException(user, book);
 
     user.books.push(book);
     await user.save();
 
+    return user;
+  }
+
+  async removeBook(dto: AddRemoveBookDto): Promise<UserEntity> {
+    const user = await this.getById(dto.uid);
+    this.checkIsUserSubscriberWithException(user);
+    if (!this.checkIsUserAssignedBook(user, dto.bookId))
+      throw new HttpException(
+        EXCEPTIONS_MESSAGES.BOOK_NOT_ADDED,
+        HttpStatus.BAD_REQUEST,
+      );
+
+    user.books = user.books.filter(({ id }) => id !== dto.bookId);
+    await user.save();
     return user;
   }
 
@@ -68,38 +106,60 @@ export class UsersService {
       );
 
     user.subscription = false;
+    // clearing books when unsubscribing
+    user.books = [];
     await user.save();
     return user;
   }
 
-  private checkForAddingBook(user: UserEntity, book: BookEntity): void {
-    if (!!book.user)
+  private checkForAddingBookWithException(
+    user: UserEntity,
+    book: BookEntity,
+  ): void {
+    if (this.checkIsUserAssignedBook(user, book.id))
+      throw new HttpException(
+        EXCEPTIONS_MESSAGES.BOOK_ALREADY_ADDED,
+        HttpStatus.BAD_REQUEST,
+      );
+
+    console.log(!!book.user && book.user.id !== user.id);
+    if (!!book.user && book.user.id !== user.id)
       throw new HttpException(
         EXCEPTIONS_MESSAGES.BOOK_OCCUPIED,
         HttpStatus.BAD_REQUEST,
       );
 
-    if (!user.subscription)
-      throw new HttpException(
-        EXCEPTIONS_MESSAGES.NOT_SUBSCRIPTION,
-        HttpStatus.BAD_REQUEST,
-      );
+    this.checkIsUserSubscriberWithException(user);
 
     if (user.books.length >= MAX_BOOKS_COUNT)
       throw new HttpException(
         EXCEPTIONS_MESSAGES.BOOKS_COUNT_OVERFLOWING,
         HttpStatus.BAD_REQUEST,
       );
+  }
 
-    if (user.books.some((b) => b.id === book.id))
+  private checkIsUserAssignedBook(user: UserEntity, bookId: number): boolean {
+    return user.books.some((b) => b.id === bookId);
+  }
+
+  private checkIsUserSubscriberWithException(user: UserEntity): void {
+    if (!user.subscription)
       throw new HttpException(
-        EXCEPTIONS_MESSAGES.BOOK_ALREADY_ADDED,
+        EXCEPTIONS_MESSAGES.NOT_SUBSCRIPTION,
         HttpStatus.BAD_REQUEST,
       );
   }
 
-  private async getById(id: number): Promise<UserEntity> {
-    return this.userRepository.findOneById(id);
+  private async checkIsUsernameUniqueWithException(
+    username: string,
+    user?: UserEntity,
+  ): Promise<void> {
+    const u = await this.getByUsername(username);
+    if (u && (!user || user.id !== u.id))
+      throw new HttpException(
+        EXCEPTIONS_MESSAGES.SHOULD_BE_UNIQUE('username'),
+        HttpStatus.BAD_REQUEST,
+      );
   }
 
   private async getByUsername(
