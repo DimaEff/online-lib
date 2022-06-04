@@ -18,8 +18,15 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto): Promise<UserEntity> {
+    const user = await this.getByUsername(dto.username);
+    console.log(user);
+    if (user)
+      throw new HttpException(
+        EXCEPTIONS_MESSAGES.SHOULD_BE_UNIQUE('username'),
+        HttpStatus.BAD_REQUEST,
+      );
     // subscription === false assignment in UserEntity as default value
-    return this.userRepository.save({ books: [], ...dto });
+    return this.userRepository.save(dto);
   }
 
   async getAll(): Promise<UserEntity[]> {
@@ -93,5 +100,11 @@ export class UsersService {
 
   private async getById(id: number): Promise<UserEntity> {
     return this.userRepository.findOneById(id);
+  }
+
+  private async getByUsername(
+    username: string,
+  ): Promise<UserEntity | undefined> {
+    return this.userRepository.findOneBy({ username });
   }
 }
